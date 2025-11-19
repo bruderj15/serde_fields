@@ -17,7 +17,7 @@ proc-macro = true
 syn = { version = "2", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
-convert_case = "0.6"
+convert_case = "0.9"
 
 [dev-dependencies]
 serde = { version = "1.0.228", features = ["serde_derive"] }
