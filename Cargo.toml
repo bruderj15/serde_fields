@@ -2,6 +2,13 @@
 name = "serde_fields"
 version = "0.1.0"
 edition = "2024"
+authors = ["Julian Bruder <julian.bruder@outlook.com>"]
+description = "Macro making rendered serde field-names available as `&'static str`"
+license-file = "LICENSE"
+readme = "README.md"
+repository = "https://github.com/bruderj15/serde_fields"
+documentation = "https://docs.rs/serde_fields"
+keywords = ["serde", "fields"]
 
 [lib]
 proc-macro = true
@@ -11,3 +18,7 @@ syn = { version = "2", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
 convert_case = "0.6"
+
+[dev-dependencies]
+serde = { version = "1.0.228", features = ["serde_derive"] }
+serde_json = { version = "1.0.145" }
