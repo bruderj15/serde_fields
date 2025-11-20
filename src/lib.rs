@@ -45,15 +45,15 @@ fn parse_field_serde_name_and_skip(attrs: &[Attribute], default_name: &str) -> (
 /// 1. A `const SERDE_FIELDS: &'static [&'static str]` on the struct, containing the
 ///    serialized names of all fields (taking `#[serde(rename = "...")]` and
 ///    `#[serde(rename_all = "...")]` into account).
-/// 2. An enum named `{StructName}SerdeFields` with variants for each field:
+/// 2. An enum named `{StructName}SerdeField` with variants for each field:
 ///    - Each variant is named after the Rust field name (PascalCase).
 ///    - Each variant is annotated with `#[serde(rename = "...")]`.
 /// 3. Implementations for:
 ///    - `as_str() -> &'static str`
 ///    - `Display`
-///    - `From<FooFields> for &'static str`
-///    - `From<&FooFields> for &'static str`
-///    - `TryFrom<&str>` and `TryFrom<String>` with error `InvalidSerdeFieldName`
+///    - `From<{StructName}SerdeField> for &'static str`
+///    - `From<&{StructName}SerdeField> for &'static str`
+///    - `TryFrom<&str>` and `TryFrom<String>` with error `Invalid{StructName}SerdeField`
 ///    - `FromStr`
 ///    - `AsRef<str>`
 ///
@@ -93,8 +93,8 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
     let rename_all_style = parse_serde_rename_all(&input.attrs);
     let apply_rename_all = |name: &str| -> String {
         match rename_all_style.as_deref() {
-            Some("lowercase") => name.to_case(Case::Lower),
-            Some("UPPERCASE") => name.to_case(Case::Upper),
+            Some("lowercase") => name.to_case(Case::Flat),
+            Some("UPPERCASE") => name.to_case(Case::UpperFlat),
             Some("PascalCase") => name.to_case(Case::Pascal),
             Some("camelCase") => name.to_case(Case::Camel),
             Some("snake_case") => name.to_case(Case::Snake),
@@ -144,6 +144,9 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
         });
     }
 
+    let error_name = format_ident!("Invalid{}SerdeField", struct_name);
+    let error_name_str = error_name.to_string();
+
     let expanded = quote! {
         impl #struct_name {
             pub const SERDE_FIELDS: &'static [&'static str] = &[
@@ -184,29 +187,35 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
         }
 
         #[derive(Debug, Clone, PartialEq, Eq)]
-        pub struct InvalidSerdeFieldName(pub String);
+        pub struct #error_name(pub String);
 
-        impl ::std::fmt::Display for InvalidSerdeFieldName {
+        impl ::std::fmt::Display for #error_name {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                write!(f, "invalid serde field name: {}", self.0)
+                write!(
+                    f,
+                    "{}: Got '{}'. Expected any of {:?}.",
+                    #error_name_str,
+                    self.0,
+                    #struct_name::SERDE_FIELDS
+                )
             }
         }
 
-        impl ::std::error::Error for InvalidSerdeFieldName {}
+        impl ::std::error::Error for #error_name {}
 
         impl ::core::convert::TryFrom<&str> for #enum_name {
-            type Error = InvalidSerdeFieldName;
+            type Error = #error_name;
 
             fn try_from(value: &str) -> Result<Self, Self::Error> {
                 match value {
                     #( #try_from_arms )*
-                    other => Err(InvalidSerdeFieldName(other.to_string())),
+                    other => Err(#error_name(other.to_string())),
                 }
             }
         }
 
         impl ::core::convert::TryFrom<String> for #enum_name {
-            type Error = InvalidSerdeFieldName;
+            type Error = #error_name;
 
             fn try_from(value: String) -> Result<Self, Self::Error> {
                 <#enum_name as ::core::convert::TryFrom<&str>>::try_from(value.as_str())
@@ -214,7 +223,7 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
         }
 
         impl ::std::str::FromStr for #enum_name {
-            type Err = InvalidSerdeFieldName;
+            type Err = #error_name;
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 Self::try_from(s)
             }

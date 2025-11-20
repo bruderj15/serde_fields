@@ -10,14 +10,14 @@ A procedural macro to generate **field name enums and constants** for structs us
 
 ## Features
 
-- Automatically generate a `const SERDE_FIELDS: &'static [&'static str]` array containing the serialized names of all struct fields.
+- Automatically generate a `const SERDE_FIELDS: &'static [&'static str]` array containing the serialized names of all non-skipped struct fields.
 - Generate an enum named `{StructName}SerdeField` for all non-skipped fields.
-- Enum variants match Rust field names (PascalCase) and are annotated with `#[serde(rename = "...")]`.
+- Enum variants match Rust field names (PascalCase) and are annotated with `#[serde(rename = "...")]` - matching the field names of the original struct. They're (de)serializable.
 - Provides convenient methods and trait implementations:
   - `as_str() -> &'static str`
   - `Display` implementation
   - `From<Enum>` and `From<&Enum>` for `&'static str`
-  - `TryFrom<&str>` and `TryFrom<String>` with custom error `InvalidSerdeFieldName`
+  - `TryFrom<&str>` and `TryFrom<String>` with custom error `Invalid{StructName}SerdeField`
   - `FromStr` implementation
   - `AsRef<str>` for ergonomic usage
 - Supports skipped fields via `#[serde(skip)]` and renaming via `#[serde(rename = "...")]`.
@@ -39,7 +39,7 @@ serde_fields = "0.1"
 
 ```rust
 use serde::{Serialize, Deserialize};
-use serde_fields::SerdeFieldNames;
+use serde_fields::SerdeField;
 
 #[derive(Serialize, Deserialize, SerdeField)]
 #[serde(rename_all = "camelCase")]
@@ -47,11 +47,12 @@ struct User {
     user_id: u32,
     #[serde(rename = "eMail")]
     email: String,
+    foo_bar: String,
 }
 
 fn main() {
     // Access serialized field names as a slice
-    assert_eq!(User::SERDE_FIELDS, &["userId", "eMail"]);
+    assert_eq!(User::SERDE_FIELDS, &["userId", "eMail", "foo_bar"]);
 
     // Use the generated enum
     let field = UserSerdeField::UserId;
@@ -65,5 +66,9 @@ fn main() {
     // Convert enum to string slice
     let name: &str = UserSerdeField::Email.into();
     assert_eq!(name, "eMail");
+
+    // Serialize
+    let serialized = serde_json::to_string(&UserSerdeField::FooBar).unwrap();
+    assert_eq!("\"foo_bar\"", serialized);
 }
 ```
