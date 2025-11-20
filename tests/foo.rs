@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use serde_fields::SerdeFieldNames;
+use serde_fields::SerdeField;
 
-#[derive(Debug, Clone, Serialize, Deserialize, SerdeFieldNames)]
+#[derive(Debug, Clone, Serialize, Deserialize, SerdeField)]
 #[serde(rename_all = "camelCase")]
 pub struct Foo {
     pub bar: String,
@@ -10,6 +10,6 @@ pub struct Foo {
 
 #[test]
 fn should_foo() {
-    assert_eq!("bazBat", FooSerdeFields::BazBat.as_str());
-    assert_eq!("bazBat", FooSerdeFields::BazBat.to_string());
+    assert_eq!("bazBat", FooSerdeField::BazBat.as_str());
+    assert_eq!("bazBat", FooSerdeField::BazBat.to_string());
 }

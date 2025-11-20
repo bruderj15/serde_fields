@@ -60,10 +60,10 @@ fn parse_field_serde_name_and_skip(attrs: &[Attribute], default_name: &str) -> (
 /// # Example
 ///
 /// ```rust
-/// use serde_fields::SerdeFieldNames;
+/// use serde_fields::SerdeField;
 /// use serde::{Serialize, Deserialize};
 ///
-/// #[derive(Serialize, Deserialize, SerdeFieldNames)]
+/// #[derive(Serialize, Deserialize, SerdeField)]
 /// #[serde(rename_all = "camelCase")]
 /// struct User {
 ///     #[serde(rename = "id")]
@@ -75,20 +75,20 @@ fn parse_field_serde_name_and_skip(attrs: &[Attribute], default_name: &str) -> (
 /// assert_eq!(User::SERDE_FIELDS, &["id", "email"]);
 ///
 /// // Use the generated enum
-/// let f = UserSerdeFields::UserId;
+/// let f = UserSerdeField::UserId;
 /// assert_eq!(f.as_str(), "id");
 /// assert_eq!(f.to_string(), "id");
 ///
 /// // TryFrom & FromStr
-/// let parsed: UserSerdeFields = "id".parse().unwrap();
-/// assert_eq!(parsed, UserSerdeFields::UserId);
+/// let parsed: UserSerdeField = "id".parse().unwrap();
+/// assert_eq!(parsed, UserSerdeField::UserId);
 /// ```
-#[proc_macro_derive(SerdeFieldNames, attributes(serde))]
-pub fn derive_serde_field_names(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(SerdeField, attributes(serde))]
+pub fn derive_serde_field(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     let struct_name = input.ident;
-    let enum_name = format_ident!("{}SerdeFields", struct_name);
+    let enum_name = format_ident!("{}SerdeField", struct_name);
 
     let rename_all_style = parse_serde_rename_all(&input.attrs);
     let apply_rename_all = |name: &str| -> String {
@@ -108,9 +108,9 @@ pub fn derive_serde_field_names(input: TokenStream) -> TokenStream {
     let fields = match input.data {
         syn::Data::Struct(ref data) => match data.fields {
             Fields::Named(ref named) => &named.named,
-            _ => panic!("SerdeFieldNames only supports structs with named fields"),
+            _ => panic!("SerdeField only supports structs with named fields"),
         },
-        _ => panic!("SerdeFieldNames only supports structs"),
+        _ => panic!("SerdeField only supports structs"),
     };
 
     let mut serde_field_literals = Vec::new();
