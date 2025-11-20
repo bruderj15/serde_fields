@@ -98,7 +98,7 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
             Some("PascalCase") => name.to_case(Case::Pascal),
             Some("camelCase") => name.to_case(Case::Camel),
             Some("snake_case") => name.to_case(Case::Snake),
-            Some("SCREAMING_SNAKE_CASE") => name.to_case(Case::ScreamingSnake),
+            Some("SCREAMING_SNAKE_CASE") => name.to_case(Case::UpperSnake),
             Some("kebab-case") => name.to_case(Case::Kebab),
             Some("SCREAMING-KEBAB-CASE") => name.to_case(Case::Cobol),
             _ => name.to_string(),

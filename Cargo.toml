@@ -8,16 +8,16 @@ license-file = "LICENSE"
 readme = "README.md"
 repository = "https://github.com/bruderj15/serde_fields"
 documentation = "https://docs.rs/serde_fields"
-keywords = ["serde", "fields"]
+keywords = ["serde", "fields", "static", "str"]
 
 [lib]
 proc-macro = true
 
 [dependencies]
-syn = { version = "2", features = ["full", "extra-traits"] }
+syn = "2"
 quote = "1"
 proc-macro2 = "1"
-convert_case = "0.6"
+convert_case = "0.9"
 
 [dev-dependencies]
 serde = { version = "1.0.228", features = ["serde_derive"] }
