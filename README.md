@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/serde_fields)](https://crates.io/crates/serde_fields)
 [![Docs.rs](https://img.shields.io/docsrs/serde_fields)](https://docs.rs/serde_fields)
-[![License](https://img.shields.io/crates/l/serde_fields)](LICENSE)
+[![License](https://img.shields.io/crates/l/serde_fields)](https://github.com/bruderj15/serde_fields/blob/main/LICENSE)
 
 A procedural macro to generate **field name enums and constants** for structs using Serde, respecting `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`.
 
