@@ -50,25 +50,23 @@ struct User {
     foo_bar: String,
 }
 
-fn main() {
-    // Access serialized field names as a slice
-    assert_eq!(User::SERDE_FIELDS, &["userId", "eMail", "foo_bar"]);
+// Access serialized field names as a slice
+assert_eq!(User::SERDE_FIELDS, &["userId", "eMail", "fooBar"]);
 
-    // Use the generated enum
-    let field = UserSerdeField::UserId;
-    assert_eq!(field.as_str(), "userId");
-    assert_eq!(field.to_string(), "userId");
+// Use the generated enum
+let field = UserSerdeField::UserId;
+assert_eq!(field.as_str(), "userId");
+assert_eq!(field.to_string(), "userId");
 
-    // Parse enum from string
-    let parsed: UserSerdeField = "userId".parse().unwrap();
-    assert_eq!(parsed, UserSerdeField::UserId);
+// Parse enum from string
+let parsed: UserSerdeField = "userId".parse().unwrap();
+assert_eq!(parsed, UserSerdeField::UserId);
 
-    // Convert enum to string slice
-    let name: &str = UserSerdeField::Email.into();
-    assert_eq!(name, "eMail");
+// Convert enum to string slice
+let name: &str = UserSerdeField::Email.into();
+assert_eq!(name, "eMail");
 
-    // Serialize
-    let serialized = serde_json::to_string(&UserSerdeField::FooBar).unwrap();
-    assert_eq!("\"foo_bar\"", serialized);
-}
+// Serialize
+let serialized = serde_json::to_string(&UserSerdeField::FooBar).unwrap();
+assert_eq!("\"fooBar\"", serialized);
 ```
