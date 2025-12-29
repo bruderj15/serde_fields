@@ -21,4 +21,4 @@ convert_case = "0.10"
 
 [dev-dependencies]
 serde = { version = "1.0.228", features = ["serde_derive"] }
-serde_json = { version = "1.0.147" }
+serde_json = { version = "1.0.148" }
