@@ -13,6 +13,7 @@ A procedural macro to generate **field/variant name enums and constants** for st
 - Automatically generate a `const SERDE_FIELDS: &'static [&'static str]` array containing the serialized names of all non-skipped struct fields or enum variants.
 - Generate an enum named `{TypeName}SerdeField` for all non-skipped fields or variants.
 - Generated enum variants match Rust field names (PascalCase) for structs and original variant names for enums. They are annotated with `#[serde(rename = "...")]`, matching the serialized names of the original type, and are (de)serializable.
+- For struct-like enum variants, generate nested enums named `{EnumName}{VariantName}SerdeField` for the variant's non-skipped fields.
 - Provides convenient methods and trait implementations:
   - `as_str() -> &'static str`
   - `Display` implementation
@@ -21,7 +22,7 @@ A procedural macro to generate **field/variant name enums and constants** for st
   - `FromStr` implementation
   - `AsRef<str>` for ergonomic usage
 - Supports skipped fields/variants via `#[serde(skip)]` and renaming via `#[serde(rename = "...")]`.
-- Fully respects type-level `#[serde(rename_all = "...")]`.
+- Fully respects type-level `#[serde(rename_all = "...")]`, and enum `#[serde(rename_all_fields = "...")]` for struct-like variant fields.
 
 ---
 
@@ -71,13 +72,29 @@ let serialized = serde_json::to_string(&UserSerdeField::FooBar).unwrap();
 assert_eq!("\"fooBar\"", serialized);
 
 #[derive(Serialize, Deserialize, SerdeField)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 enum Event {
     UserCreated,
     #[serde(rename = "deleted")]
     UserDeleted,
+    PayloadReceived {
+        payload_id: u32,
+        #[serde(rename = "data")]
+        payload_data: String,
+    },
 }
 
-assert_eq!(Event::SERDE_FIELDS, &["user-created", "deleted"]);
+assert_eq!(
+    Event::SERDE_FIELDS,
+    &["user-created", "deleted", "payload-received"]
+);
 assert_eq!(EventSerdeField::UserCreated.as_str(), "user-created");
+assert_eq!(
+    EventPayloadReceivedSerdeField::SERDE_FIELDS,
+    &["payloadId", "data"]
+);
+assert_eq!(
+    EventPayloadReceivedSerdeField::PayloadId.as_str(),
+    "payloadId"
+);
 ```
