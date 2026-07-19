@@ -1,6 +1,6 @@
 [package]
 name = "serde_fields"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Julian Bruder <julian.bruder@outlook.com>"]
 description = "Macro making rendered serde field-names available as `&'static str`"
