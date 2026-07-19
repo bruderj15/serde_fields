@@ -2,16 +2,32 @@
 
 use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{Attribute, DeriveInput, Fields, parse_macro_input};
+use syn::{Attribute, Data, DeriveInput, Fields, Ident, parse_macro_input};
+
+struct SerdeItem {
+    variant_ident: Ident,
+    serde_name: String,
+}
 
 fn parse_serde_rename_all(attrs: &[Attribute]) -> Option<String> {
+    parse_serde_rename_all_attr(attrs, "rename_all")
+}
+
+fn parse_serde_rename_all_fields(attrs: &[Attribute]) -> Option<String> {
+    parse_serde_rename_all_attr(attrs, "rename_all_fields")
+}
+
+fn parse_serde_rename_all_attr(attrs: &[Attribute], attr_name: &str) -> Option<String> {
     for attr in attrs.iter().filter(|a| a.path().is_ident("serde")) {
         let mut found = None;
         let _ = attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("rename_all") {
+            if meta.path.is_ident(attr_name) {
                 let lit: syn::LitStr = meta.value()?.parse()?;
                 found = Some(lit.value());
+            } else if meta.input.peek(syn::Token![=]) {
+                let _: syn::Lit = meta.value()?.parse()?;
             }
             Ok(())
         });
@@ -22,7 +38,21 @@ fn parse_serde_rename_all(attrs: &[Attribute]) -> Option<String> {
     None
 }
 
-fn parse_field_serde_name_and_skip(attrs: &[Attribute], default_name: &str) -> (String, bool) {
+fn apply_rename_all(rename_all_style: Option<&str>, name: &str) -> String {
+    match rename_all_style {
+        Some("lowercase") => name.to_case(Case::Flat),
+        Some("UPPERCASE") => name.to_case(Case::UpperFlat),
+        Some("PascalCase") => name.to_case(Case::Pascal),
+        Some("camelCase") => name.to_case(Case::Camel),
+        Some("snake_case") => name.to_case(Case::Snake),
+        Some("SCREAMING_SNAKE_CASE") => name.to_case(Case::UpperSnake),
+        Some("kebab-case") => name.to_case(Case::Kebab),
+        Some("SCREAMING-KEBAB-CASE") => name.to_case(Case::Cobol),
+        _ => name.to_string(),
+    }
+}
+
+fn parse_serde_name_and_skip(attrs: &[Attribute], default_name: &str) -> (String, bool) {
     let mut rename: Option<String> = None;
     let mut skip = false;
 
@@ -33,6 +63,8 @@ fn parse_field_serde_name_and_skip(attrs: &[Attribute], default_name: &str) -> (
                 rename = Some(lit.value());
             } else if meta.path.is_ident("skip") {
                 skip = true;
+            } else if meta.input.peek(syn::Token![=]) {
+                let _: syn::Lit = meta.value()?.parse()?;
             }
             Ok(())
         });
@@ -41,97 +73,20 @@ fn parse_field_serde_name_and_skip(attrs: &[Attribute], default_name: &str) -> (
     (rename.unwrap_or_else(|| default_name.to_string()), skip)
 }
 
-/// Derive enum and constants for Serde field-names.
-///
-/// This macro generates:
-/// 1. A `const SERDE_FIELDS: &'static [&'static str]` on the struct, containing the
-///    serialized names of all fields (taking `#[serde(rename = "...")]` and
-///    `#[serde(rename_all = "...")]` into account).
-/// 2. An enum named `{StructName}SerdeField` with variants for each field:
-///    - Each variant is named after the Rust field name (PascalCase).
-///    - Each variant is annotated with `#[serde(rename = "...")]`.
-/// 3. Implementations for:
-///    - `as_str() -> &'static str`
-///    - `Display`
-///    - `From<{StructName}SerdeField> for &'static str`
-///    - `From<&{StructName}SerdeField> for &'static str`
-///    - `TryFrom<&str>` and `TryFrom<String>` with error `Invalid{StructName}SerdeField`
-///    - `FromStr`
-///    - `AsRef<str>`
-///
-/// # Example
-///
-/// ```rust
-/// use serde_fields::SerdeField;
-/// use serde::{Serialize, Deserialize};
-///
-/// #[derive(Serialize, Deserialize, SerdeField)]
-/// #[serde(rename_all = "camelCase")]
-/// struct User {
-///     #[serde(rename = "id")]
-///     user_id: u32,
-///     email: String,
-/// }
-///
-/// // Access field-names as string slice
-/// assert_eq!(User::SERDE_FIELDS, &["id", "email"]);
-///
-/// // Use the generated enum
-/// let f = UserSerdeField::UserId;
-/// assert_eq!(f.as_str(), "id");
-/// assert_eq!(f.to_string(), "id");
-///
-/// // TryFrom & FromStr
-/// let parsed: UserSerdeField = "id".parse().unwrap();
-/// assert_eq!(parsed, UserSerdeField::UserId);
-/// ```
-#[proc_macro_derive(SerdeField, attributes(serde))]
-pub fn derive_serde_field(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let struct_name = input.ident;
-    let enum_name = format_ident!("{}SerdeField", struct_name);
-
-    let rename_all_style = parse_serde_rename_all(&input.attrs);
-    let apply_rename_all = |name: &str| -> String {
-        match rename_all_style.as_deref() {
-            Some("lowercase") => name.to_case(Case::Flat),
-            Some("UPPERCASE") => name.to_case(Case::UpperFlat),
-            Some("PascalCase") => name.to_case(Case::Pascal),
-            Some("camelCase") => name.to_case(Case::Camel),
-            Some("snake_case") => name.to_case(Case::Snake),
-            Some("SCREAMING_SNAKE_CASE") => name.to_case(Case::UpperSnake),
-            Some("kebab-case") => name.to_case(Case::Kebab),
-            Some("SCREAMING-KEBAB-CASE") => name.to_case(Case::Cobol),
-            _ => name.to_string(),
-        }
-    };
-
-    let fields = match input.data {
-        syn::Data::Struct(ref data) => match data.fields {
-            Fields::Named(ref named) => &named.named,
-            _ => panic!("SerdeField only supports structs with named fields"),
-        },
-        _ => panic!("SerdeField only supports structs"),
-    };
-
+fn build_serde_field_enum(
+    source_type_name: Option<&Ident>,
+    enum_name: &Ident,
+    error_name: &Ident,
+    serde_items: &[SerdeItem],
+) -> TokenStream2 {
     let mut serde_field_literals = Vec::new();
     let mut variant_definitions = Vec::new();
     let mut as_str_arms = Vec::new();
     let mut try_from_arms = Vec::new();
 
-    for field in fields {
-        let ident = field.ident.as_ref().unwrap();
-        let rust_name = ident.to_string();
-        let default_serde_name = apply_rename_all(&rust_name);
-
-        let (serde_name, skip) = parse_field_serde_name_and_skip(&field.attrs, &default_serde_name);
-        if skip {
-            continue;
-        }
-
-        let variant_ident = format_ident!("{}", rust_name.to_case(Case::Pascal));
-        let rename_literal = serde_name.clone();
+    for item in serde_items {
+        let variant_ident = &item.variant_ident;
+        let rename_literal = item.serde_name.clone();
 
         serde_field_literals.push(quote! { #rename_literal });
         variant_definitions.push(quote! {
@@ -146,15 +101,20 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
         });
     }
 
-    let error_name = format_ident!("Invalid{}SerdeField", struct_name);
+    let source_type_serde_fields = source_type_name
+        .map(|source_type_name| {
+            quote! {
+                impl #source_type_name {
+                    pub const SERDE_FIELDS: &'static [&'static str] = #enum_name::SERDE_FIELDS;
+                }
+            }
+        })
+        .unwrap_or_default();
+
     let error_name_str = error_name.to_string();
 
-    let expanded = quote! {
-        impl #struct_name {
-            pub const SERDE_FIELDS: &'static [&'static str] = &[
-                #( #serde_field_literals ),*
-            ];
-        }
+    quote! {
+        #source_type_serde_fields
 
         #[derive(::serde::Serialize, ::serde::Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
         #[allow(non_camel_case_types)]
@@ -163,6 +123,10 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
         }
 
         impl #enum_name {
+            pub const SERDE_FIELDS: &'static [&'static str] = &[
+                #( #serde_field_literals ),*
+            ];
+
             pub const fn as_str(&self) -> &'static str {
                 match self {
                     #( #as_str_arms )*
@@ -198,7 +162,7 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
                     "{}: Got '{}'. Expected any of {:?}.",
                     #error_name_str,
                     self.0,
-                    #struct_name::SERDE_FIELDS
+                    #enum_name::SERDE_FIELDS
                 )
             }
         }
@@ -236,6 +200,153 @@ pub fn derive_serde_field(input: TokenStream) -> TokenStream {
                 self.as_str()
             }
         }
+    }
+}
+
+/// Derive enum and constants for Serde field/variant names.
+///
+/// This macro generates:
+/// 1. A `const SERDE_FIELDS: &'static [&'static str]` on the type, containing the
+///    serialized names of all struct fields or enum variants (taking
+///    `#[serde(rename = "...")]`, `#[serde(rename_all = "...")]`, and
+///    `#[serde(skip)]` into account).
+/// 2. An enum named `{TypeName}SerdeField` with variants for each field or variant:
+///    - Struct field variants are named after the Rust field name (PascalCase).
+///    - Enum variant names are preserved.
+///    - Each generated variant is annotated with `#[serde(rename = "...")]`.
+/// 3. For each struct-like enum variant, a nested enum named
+///    `{EnumName}{VariantName}SerdeField` is generated for that variant's fields.
+/// 4. Implementations for:
+///    - `as_str() -> &'static str`
+///    - `Display`
+///    - `From<{TypeName}SerdeField> for &'static str`
+///    - `From<&{TypeName}SerdeField> for &'static str`
+///    - `TryFrom<&str>` and `TryFrom<String>` with error `Invalid{TypeName}SerdeField`
+///    - `FromStr`
+///    - `AsRef<str>`
+///
+/// # Example
+///
+/// ```rust
+/// use serde_fields::SerdeField;
+/// use serde::{Serialize, Deserialize};
+///
+/// #[derive(Serialize, Deserialize, SerdeField)]
+/// #[serde(rename_all = "camelCase")]
+/// struct User {
+///     #[serde(rename = "id")]
+///     user_id: u32,
+///     email: String,
+/// }
+///
+/// // Access field-names as string slice
+/// assert_eq!(User::SERDE_FIELDS, &["id", "email"]);
+///
+/// // Use the generated enum
+/// let f = UserSerdeField::UserId;
+/// assert_eq!(f.as_str(), "id");
+/// assert_eq!(f.to_string(), "id");
+///
+/// // TryFrom & FromStr
+/// let parsed: UserSerdeField = "id".parse().unwrap();
+/// assert_eq!(parsed, UserSerdeField::UserId);
+/// ```
+#[proc_macro_derive(SerdeField, attributes(serde))]
+pub fn derive_serde_field(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let type_name = input.ident;
+    let enum_name = format_ident!("{}SerdeField", type_name);
+    let error_name = format_ident!("Invalid{}SerdeField", type_name);
+
+    let rename_all_style = parse_serde_rename_all(&input.attrs);
+    let rename_all_fields_style = parse_serde_rename_all_fields(&input.attrs);
+    let mut serde_items: Vec<SerdeItem> = Vec::new();
+    let mut nested_field_enums = Vec::new();
+
+    match input.data {
+        Data::Struct(ref data) => {
+            let fields = match data.fields {
+                Fields::Named(ref named) => &named.named,
+                _ => panic!("SerdeField only supports structs with named fields and enums"),
+            };
+
+            for field in fields {
+                let ident = field.ident.as_ref().unwrap();
+                let rust_name = ident.to_string();
+                let default_serde_name = apply_rename_all(rename_all_style.as_deref(), &rust_name);
+                let (serde_name, skip) =
+                    parse_serde_name_and_skip(&field.attrs, &default_serde_name);
+
+                if !skip {
+                    let variant_ident = format_ident!("{}", rust_name.to_case(Case::Pascal));
+                    serde_items.push(SerdeItem {
+                        variant_ident,
+                        serde_name,
+                    });
+                }
+            }
+        }
+        Data::Enum(ref data) => {
+            for variant in &data.variants {
+                let variant_ident = variant.ident.clone();
+                let rust_name = variant_ident.to_string();
+                let default_serde_name = apply_rename_all(rename_all_style.as_deref(), &rust_name);
+                let (serde_name, skip) =
+                    parse_serde_name_and_skip(&variant.attrs, &default_serde_name);
+
+                if !skip {
+                    serde_items.push(SerdeItem {
+                        variant_ident: variant_ident.clone(),
+                        serde_name,
+                    });
+                }
+
+                let Fields::Named(named_fields) = &variant.fields else {
+                    continue;
+                };
+
+                let variant_rename_all_style = parse_serde_rename_all(&variant.attrs)
+                    .or_else(|| rename_all_fields_style.clone());
+                let mut nested_serde_items = Vec::new();
+
+                for field in &named_fields.named {
+                    let ident = field.ident.as_ref().unwrap();
+                    let rust_name = ident.to_string();
+                    let default_serde_name =
+                        apply_rename_all(variant_rename_all_style.as_deref(), &rust_name);
+                    let (serde_name, skip) =
+                        parse_serde_name_and_skip(&field.attrs, &default_serde_name);
+
+                    if !skip {
+                        let variant_ident = format_ident!("{}", rust_name.to_case(Case::Pascal));
+                        nested_serde_items.push(SerdeItem {
+                            variant_ident,
+                            serde_name,
+                        });
+                    }
+                }
+
+                let nested_enum_name = format_ident!("{}{}SerdeField", type_name, variant_ident);
+                let nested_error_name =
+                    format_ident!("Invalid{}{}SerdeField", type_name, variant_ident);
+                nested_field_enums.push(build_serde_field_enum(
+                    None,
+                    &nested_enum_name,
+                    &nested_error_name,
+                    &nested_serde_items,
+                ));
+            }
+        }
+        _ => panic!("SerdeField only supports structs with named fields and enums"),
+    }
+
+    let top_level_enum =
+        build_serde_field_enum(Some(&type_name), &enum_name, &error_name, &serde_items);
+
+    let expanded = quote! {
+        #top_level_enum
+        #( #nested_field_enums )*
     };
 
     TokenStream::from(expanded)
