@@ -14,7 +14,7 @@ keywords = ["serde", "fields", "static", "str"]
 proc-macro = true
 
 [dependencies]
-syn = "2"
+syn = "3"
 quote = "1"
 proc-macro2 = "1"
 convert_case = "0.11"
